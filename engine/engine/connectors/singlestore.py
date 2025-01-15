@@ -3,7 +3,9 @@ import aiomysql
 import pandas as pd
 import time
 
-class SingleStoreConnector:
+from engine.connectors.connector import Connector
+
+class SingleStoreConnector(Connector):
     def __init__(self, host: str, port: int, user: str, password: str, database: str):
         self.host = host
         self.port = port
@@ -103,12 +105,12 @@ class SingleStoreConnector:
                     query = f"""
                         SELECT *
                         FROM {table_name}
-                        LIMIT {interval}
-                        OFFSET {offset}
                     """
 
                     if sort_column:
                         query += f" ORDER BY {sort_column}"
+
+                    query += f" LIMIT {interval} OFFSET {offset}"
 
                     query_start = time.time()
                     await cur.execute(query)
@@ -162,7 +164,10 @@ class SingleStoreConnector:
 
     async def ingest_parquet(self, table_name: str, parquet_path: str, aws_access_key_id: str, aws_secret_access_key: str) -> None:
         try:
-            pipeline_name = f"es_{table_name}_pipeline"
+            # Extract job ID from the last path segment before .parquet
+            job_id = parquet_path.split("/*.parquet")[0].split("/")[-1]
+            print(f"Starting parquet ingestion for Job ID: {job_id}")
+            pipeline_name = f"es_{job_id.replace('-', '_')}_pipeline"
             
             # Get the table schema to map columns
             schema = await self.get_table_schema(table_name)
@@ -187,7 +192,7 @@ class SingleStoreConnector:
             AS LOAD DATA S3 '{parquet_path}'
             CONFIG '{{"region": "us-west-2"}}'
             CREDENTIALS '{{"aws_access_key_id": "{aws_access_key_id}", "aws_secret_access_key": "{aws_secret_access_key}"}}'
-            INTO TABLE {table_name}
+            REPLACE INTO TABLE {table_name}
             FORMAT PARQUET
             (
                 {column_mapping_str}
