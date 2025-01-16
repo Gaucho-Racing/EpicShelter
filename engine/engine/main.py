@@ -39,6 +39,10 @@ def parse_args():
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('-m', '--migrate-only', action='store_true', help='Only migrate data, do not backup')
     parser.add_argument('-d', '--local-dir', required=False, help='Local directory to store data')
+    parser.add_argument('-so', '--src-start-offset', type=int, required=False, help='Source start offset')
+    parser.add_argument('-eo', '--src-end-offset', type=int, required=False, help='Source end offset')
+    parser.add_argument('-sc', '--src-sort-column', required=False, help='Source sort column')
+    parser.add_argument('-rd', '--reset-dest-table', action='store_true', help='Reset destination table before migration')
 
     args = parser.parse_args()
     
@@ -66,6 +70,9 @@ def parse_args():
     if args.migrate_only:
         Config.migrate_only = True
 
+    if args.reset_dest_table:
+        Config.reset_dest_table = True
+
     if args.job_id:
         Config.job_id = args.job_id
     else:
@@ -92,7 +99,10 @@ async def run_job(args):
         dest_table=args.dst_table,
         s3_bucket=args.s3_bucket,
         s3_access_key_id=args.s3_access_key_id,
-        s3_secret_access_key=args.s3_secret_access_key
+        s3_secret_access_key=args.s3_secret_access_key,
+        start_offset=args.src_start_offset,
+        end_offset=args.src_end_offset,
+        sort_column=args.src_sort_column
     )
     job_service = JobService(job)
     await job_service.run_job()

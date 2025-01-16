@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 import multiprocessing
 
 class Job:
-    def __init__(self, job_id: str, source_engine: str, source_host: str, source_port: int, source_user: str, source_password: str, source_database: str, source_table: str, dest_engine: str, dest_host: str, dest_port: int, dest_user: str, dest_password: str, dest_database: str, dest_table: str, s3_bucket: str, s3_access_key_id: str, s3_secret_access_key: str):
+    def __init__(self, job_id: str, source_engine: str, source_host: str, source_port: int, source_user: str, source_password: str, source_database: str, source_table: str, dest_engine: str, dest_host: str, dest_port: int, dest_user: str, dest_password: str, dest_database: str, dest_table: str, s3_bucket: str, s3_access_key_id: str, s3_secret_access_key: str, start_offset: int, end_offset: int, sort_column: str):
         self.job_id = job_id
         self.source_engine = source_engine
         self.source_host = source_host
@@ -31,7 +31,10 @@ class Job:
         self.dest_table = dest_table
         self.s3_bucket = s3_bucket
         self.s3_access_key_id = s3_access_key_id
-        self.s3_secret_access_key = s3_secret_access_key        
+        self.s3_secret_access_key = s3_secret_access_key
+        self.start_offset = start_offset
+        self.end_offset = end_offset
+        self.sort_column = sort_column
 
 class JobService:
     def __init__(self, job: Job):
@@ -59,6 +62,7 @@ class JobService:
             self.job.source_table,
             interval=self.batch_size,
             offset=offset,
+            sort_column=self.job.sort_column
         )
         
         parquet_service = ParquetService()
@@ -96,13 +100,29 @@ class JobService:
         if not schemas_match:
             raise Exception("Source and destination schemas do not match")
         
+        start_row = 0
         total_rows = await self.source.get_row_count(self.job.source_table)
+        end_row = total_rows
         print(f"Total rows: {total_rows}")
+
+        if self.job.start_offset:
+            start_row = self.job.start_offset
+        if self.job.end_offset:
+            end_row = self.job.end_offset
+
+        print(f"Start row: {start_row}")
+        print(f"End row: {end_row}")
+
+        if start_row > end_row:
+            raise Exception("Start row offset is greater than end row offset")
+        
+        if Config.reset_dest_table:
+            await self.dest.delete_table(self.job.dest_table)
 
         with ThreadPoolExecutor(max_workers=2 * multiprocessing.cpu_count()) as executor:  # Adjust max_workers as needed
             futures = [
                 executor.submit(self.process_batch_sync, offset)
-                for offset in range(0, total_rows, self.batch_size)
+                for offset in range(start_row, end_row, self.batch_size)
             ]
             results = [future.result() for future in futures]
 
@@ -116,7 +136,6 @@ class JobService:
         else:
             if Config.migrate_only:
                 self.delete_export_dir()
-
 
         row_counts_match = await self.validate_row_counts()
         if not row_counts_match:
@@ -214,4 +233,5 @@ class JobService:
         dest_row_count = await self.dest.get_row_count(self.job.dest_table)
 
         return source_row_count == dest_row_count
+    
     

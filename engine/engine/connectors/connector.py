@@ -52,3 +52,8 @@ class Connector(ABC):
     async def ingest_parquet(self, table_name: str, parquet_path: str, aws_access_key_id: str, aws_secret_access_key: str) -> None:
         """Optional: Ingest parquet files directly into a table"""
         pass
+
+    @abstractmethod
+    async def delete_table(self, table_name: str) -> None:
+        """Delete data from a table"""
+        pass

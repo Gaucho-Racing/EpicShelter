@@ -233,3 +233,15 @@ class SingleStoreConnector(Connector):
         except Exception as e:
             print(f"Error creating pipeline for table {table_name}: {str(e)}")
             raise
+
+    async def delete_table(self, table_name: str) -> None:
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    delete_query = f"DELETE FROM {table_name}"
+                    
+                    await cur.execute(delete_query)
+                    
+        except Exception as e:
+            print(f"Error deleting from table {table_name}: {str(e)}")
+            raise
