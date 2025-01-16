@@ -209,7 +209,7 @@ class JobService:
         if not can_connect_dest:
             raise Exception("Failed to connect to destination")
         
-        if Config.use_s3:   
+        if Config.use_s3:
             self.s3 = S3Service(
                 self.job.s3_bucket,
                 self.job.s3_access_key_id,
