@@ -132,6 +132,7 @@ class JobService:
         if Config.use_s3:
             self.delete_export_dir()
             if Config.migrate_only:
+                # TODO: Delete the S3 source
                 pass
         else:
             if Config.migrate_only:
