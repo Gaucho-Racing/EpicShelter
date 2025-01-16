@@ -1,9 +1,11 @@
 import asyncio
 from datetime import datetime
 import os
+import shutil
 import time
 import uuid
 
+from engine.config.config import Config
 from engine.services.s3 import S3Service
 from engine.services.parquet import ParquetService
 from engine.connectors.singlestore import SingleStoreConnector
@@ -11,8 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 import multiprocessing
 
 class Job:
-    def __init__(self, source_engine: str, source_host: str, source_port: int, source_user: str, source_password: str, source_database: str, source_table: str, dest_engine: str, dest_host: str, dest_port: int, dest_user: str, dest_password: str, dest_database: str, dest_table: str, s3_bucket: str, s3_access_key_id: str, s3_secret_access_key: str):
-        self.job_id = str(uuid.uuid4())
+    def __init__(self, job_id: str, source_engine: str, source_host: str, source_port: int, source_user: str, source_password: str, source_database: str, source_table: str, dest_engine: str, dest_host: str, dest_port: int, dest_user: str, dest_password: str, dest_database: str, dest_table: str, s3_bucket: str, s3_access_key_id: str, s3_secret_access_key: str):
+        self.job_id = job_id
         self.source_engine = source_engine
         self.source_host = source_host
         self.source_port = source_port
@@ -60,13 +62,14 @@ class JobService:
         )
         
         parquet_service = ParquetService()
-        output_path = f"exports/{self.job.job_id}/{self.job.source_table}_{batch_num}.parquet"
+        output_path = f"{Config.local_dir}/{self.job.job_id}/{self.job.source_table}_{batch_num}.parquet"
         await parquet_service.dataframe_to_parquet(data, output_path)
         
-        self.s3.upload_parquet(output_path, f"epic-shelter/{self.job.job_id}/{self.job.source_table}_{batch_num}.parquet")
+        if Config.use_s3:
+            self.s3.upload_parquet(output_path, f"epic-shelter/{self.job.job_id}/{self.job.source_table}_{batch_num}.parquet")
         
         # If destination doesn't support parquet ingestion, write directly
-        if not hasattr(self.dest, 'ingest_parquet'):
+        if not Config.use_s3 or not hasattr(self.dest, 'ingest_parquet'):
             batch_dest = SingleStoreConnector(
                 self.job.dest_host,
                 int(self.job.dest_port),
@@ -77,7 +80,7 @@ class JobService:
             await batch_dest.connect()
             await batch_dest.write_table(self.job.dest_table, data)
             await batch_dest.disconnect()
-            
+
         await batch_source.disconnect()
         print(f"Batch {batch_num} saved to {output_path}")
         return len(data)
@@ -103,8 +106,18 @@ class JobService:
             ]
             results = [future.result() for future in futures]
 
-        await self.dest.ingest_parquet(self.job.dest_table, f"{self.job.s3_bucket}/epic-shelter/{self.job.job_id}/*.parquet", self.job.s3_access_key_id, self.job.s3_secret_access_key)
+        if Config.use_s3 and hasattr(self.dest, 'ingest_parquet'):
+            await self.dest.ingest_parquet(self.job.dest_table, f"{self.job.s3_bucket}/epic-shelter/{self.job.job_id}/*.parquet", self.job.s3_access_key_id, self.job.s3_secret_access_key)
         
+        if Config.use_s3:
+            self.delete_export_dir()
+            if Config.migrate_only:
+                pass
+        else:
+            if Config.migrate_only:
+                self.delete_export_dir()
+
+
         row_counts_match = await self.validate_row_counts()
         if not row_counts_match:
             raise Exception("Source and destination row counts do not match")
@@ -125,16 +138,20 @@ class JobService:
         print("=====================")
 
     def reset_export_dir(self):
-        if os.path.exists(f"exports/{self.job.job_id}"):
-            for file in os.listdir(f"exports/{self.job.job_id}"):
-                file_path = os.path.join(f"exports/{self.job.job_id}", file)
+        if os.path.exists(f"{Config.local_dir}/{self.job.job_id}"):
+            for file in os.listdir(f"{Config.local_dir}/{self.job.job_id}"):
+                file_path = os.path.join(f"{Config.local_dir}/{self.job.job_id}", file)
                 try:
                     if os.path.isfile(file_path):
                         os.unlink(file_path)
                 except Exception as e:
                     print(f"Error deleting {file_path}: {e}")
         else:
-            os.makedirs(f"exports/{self.job.job_id}")
+            os.makedirs(f"{Config.local_dir}/{self.job.job_id}")
+
+    def delete_export_dir(self):
+        if os.path.exists(f"{Config.local_dir}/{self.job.job_id}"):
+            shutil.rmtree(f"{Config.local_dir}/{self.job.job_id}")
 
     async def initialize_connectors(self):
         """
@@ -173,11 +190,12 @@ class JobService:
         if not can_connect_dest:
             raise Exception("Failed to connect to destination")
         
-        self.s3 = S3Service(
-            self.job.s3_bucket,
-            self.job.s3_access_key_id,
-            self.job.s3_secret_access_key
-        )
+        if Config.use_s3:   
+            self.s3 = S3Service(
+                self.job.s3_bucket,
+                self.job.s3_access_key_id,
+                self.job.s3_secret_access_key
+            )
 
     async def validate_schemas(self) -> bool:
         """
