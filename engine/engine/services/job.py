@@ -8,7 +8,7 @@ import uuid
 from engine.config.config import Config
 from engine.services.s3 import S3Service
 from engine.services.parquet import ParquetService
-from engine.connectors.singlestore import SingleStoreConnector
+from engine.connectors.connector import Connector
 from concurrent.futures import ThreadPoolExecutor
 import multiprocessing
 
@@ -46,7 +46,8 @@ class JobService:
 
     async def process_batch(self, offset: int) -> int:
         # Create a new connector instance for each batch
-        batch_source = SingleStoreConnector(
+        batch_source = Connector.create_connector(
+            self.job.source_engine,
             self.job.source_host,
             int(self.job.source_port),
             self.job.source_user,
@@ -74,7 +75,8 @@ class JobService:
         
         # If destination doesn't support parquet ingestion, write directly
         if not Config.use_s3 or not hasattr(self.dest, 'ingest_parquet'):
-            batch_dest = SingleStoreConnector(
+            batch_dest = Connector.create_connector(
+                self.job.dest_engine,
                 self.job.dest_host,
                 int(self.job.dest_port),
                 self.job.dest_user,
@@ -177,27 +179,23 @@ class JobService:
         """
         Initialize the source and destination connectors
         """
-        if self.job.source_engine == "singlestore":
-            self.source = SingleStoreConnector(
-                self.job.source_host,
-                int(self.job.source_port),
-                self.job.source_user,
-                self.job.source_password,
-                self.job.source_database,
-            )
-        else:
-            raise Exception(f"Unsupported engine: {self.job.source_engine}")
+        self.source = Connector.create_connector(
+            self.job.source_engine,
+            self.job.source_host,
+            int(self.job.source_port),
+            self.job.source_user,
+            self.job.source_password,
+            self.job.source_database
+        )
         
-        if self.job.dest_engine == "singlestore":
-            self.dest = SingleStoreConnector(
-                self.job.dest_host, 
-                int(self.job.dest_port),
-                self.job.dest_user,
-                self.job.dest_password, 
-                self.job.dest_database, 
-            )
-        else:
-            raise Exception(f"Unsupported engine: {self.job.dest_engine}")
+        self.dest = Connector.create_connector(
+            self.job.dest_engine,
+            self.job.dest_host,
+            int(self.job.dest_port),
+            self.job.dest_user,
+            self.job.dest_password,
+            self.job.dest_database
+        )
 
         await self.source.connect()
         await self.dest.connect()

@@ -3,6 +3,22 @@ from typing import Any, Dict, List
 import pandas as pd
 
 class Connector(ABC):
+    
+    @staticmethod
+    def create_connector(engine: str, host: str, port: int, user: str, password: str, database: str) -> Any:
+        
+        from .singlestore import SingleStoreConnector
+
+        connector_map = {
+            "singlestore": SingleStoreConnector
+        }
+
+        connector_class = connector_map.get(engine)
+        if not connector_class:
+            raise ValueError(f"Unsupported engine: {engine}")
+
+        return connector_class(host, port, user, password, database)
+
     @abstractmethod
     async def connect(self) -> None:
         """Establish connection to the database"""
