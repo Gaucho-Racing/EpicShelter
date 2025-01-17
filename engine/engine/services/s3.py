@@ -32,3 +32,11 @@ class S3Service:
             return False
             
         return self.upload_file(parquet_path, s3_path)
+
+    def delete_files(self, s3_path: str) -> bool:
+        try:
+            self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_path)
+            return True
+        except ClientError as e:
+            self.logger.error(f"Failed to delete {s3_path}: {str(e)}")
+            return False
