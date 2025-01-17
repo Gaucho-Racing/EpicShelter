@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument('-so', '--src-start-offset', type=int, required=False, help='Source start offset')
     parser.add_argument('-eo', '--src-end-offset', type=int, required=False, help='Source end offset')
     parser.add_argument('-sc', '--src-sort-column', required=False, help='Source sort column')
-    parser.add_argument('-rd', '--reset-dest-table', action='store_true', help='Reset destination table before migration')
+    parser.add_argument('-kd', '--keep-dest-table', action='store_true', help='Do not delete destination table before migration')
 
     args = parser.parse_args()
     
@@ -70,8 +70,8 @@ def parse_args():
     if args.migrate_only:
         Config.migrate_only = True
 
-    if args.reset_dest_table:
-        Config.reset_dest_table = True
+    if args.keep_dest_table:
+        Config.reset_dest_table = False
 
     if args.job_id:
         Config.job_id = args.job_id

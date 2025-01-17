@@ -134,7 +134,8 @@ class JobService:
         if Config.use_s3:
             self.delete_export_dir()
             if Config.migrate_only:
-                self.s3.delete_files(f"epic-shelter/{self.job.job_id}/*.parquet")
+                # TODO: Delete the S3 source backup
+                pass
         else:
             if Config.migrate_only:
                 self.delete_export_dir()
