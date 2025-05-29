@@ -14,11 +14,13 @@ dependencies = [
     "boto3 (>=1.35.98,<2.0.0)",
     "faker (>=33.3.1,<34.0.0)",
     "cryptography (>=44.0.0,<45.0.0)",
-    "argparse (>=1.4.0,<2.0.0)"
+    "argparse (>=1.4.0,<2.0.0)",
+    "typer (>=0.16.0,<0.17.0)",
+    "pymysql (>=1.1.1,<2.0.0)"
 ]
 
 [tool.poetry.scripts]
-engine = "engine.main:main"
+engine = "engine.main:app"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
